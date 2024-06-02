@@ -134,6 +134,9 @@ function UserDashboard() {
     });
   }, [session, toast]);
 
+  // Check if running in the client-side context
+  const isClient = typeof window !== 'undefined';
+
   // Render the user dashboard
   return (
     <div className="my-8 mx-4 md:mx-8 lg:mx-auto p-6 bg-white rounded w-full max-w-6xl">
@@ -144,11 +147,11 @@ function UserDashboard() {
         <div className="flex items-center">
           <input
             type="text"
-            value={`https://${window.location.host}/u/${session?.user?.username}`}
+            value={isClient ? `https://${window.location.host}/u/${session?.user?.username}` : ''}
             disabled
             className="input input-bordered w-full p-2 mr-2"
           />
-          <Button onClick={copyToClipboard}>Copy</Button>
+          <Button onClick={isClient ? copyToClipboard : undefined}>Copy</Button>
         </div>
       </div>
 
