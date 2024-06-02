@@ -15,32 +15,38 @@ import { useSession } from 'next-auth/react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { AcceptMessageSchema } from '@/schemas/acceptMessageSchema';
+import { ObjectId } from 'mongodb'; // Import ObjectId from mongodb
 
 function UserDashboard() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSwitchLoading, setIsSwitchLoading] = useState(false);
+  const [acceptMessages, setAcceptMessages] = useState<boolean | undefined>(undefined); // State for acceptMessages
 
   const { toast } = useToast();
-
-  const handleDeleteMessage = (messageId: string) => {
-    setMessages(messages.filter((message) => message._id !== messageId));
-  };
-
   const { data: session } = useSession();
 
-  const form = useForm({
+  const { register, setValue, handleSubmit, watch } = useForm({
     resolver: zodResolver(AcceptMessageSchema),
+    defaultValues: {
+      acceptMessages: acceptMessages, // Initialize acceptMessages from state
+    },
   });
 
-  const { register, watch, setValue } = form;
-  const acceptMessages = watch('acceptMessages');
+  const acceptMessagesValue = watch('acceptMessages'); // Get acceptMessages value from form
 
+  // Handle delete message
+  const handleDeleteMessage = (messageId: string) => {
+    setMessages(messages.filter((message) => message._id.toString() !== messageId));
+  };
+
+  // Fetch accept messages state from server
   const fetchAcceptMessages = useCallback(async () => {
     setIsSwitchLoading(true);
     try {
       const response = await axios.get<ApiResponse>('/api/accept-messages');
-      setValue('acceptMessages', response.data.isAcceptingMessages);
+      setAcceptMessages(response.data.isAcceptingMessages); // Set acceptMessages state
+      setValue('acceptMessages', response.data.isAcceptingMessages); // Set form value
     } catch (error) {
       const axiosError = error as AxiosError<ApiResponse>;
       toast({
@@ -55,51 +61,49 @@ function UserDashboard() {
     }
   }, [setValue, toast]);
 
-  const fetchMessages = useCallback(
-    async (refresh: boolean = false) => {
-      setIsLoading(true);
-      setIsSwitchLoading(false);
-      try {
-        const response = await axios.get<ApiResponse>('/api/get-messages');
-        setMessages(response.data.messages || []);
-        if (refresh) {
-          toast({
-            title: 'Refreshed Messages',
-            description: 'Showing latest messages',
-          });
-        }
-      } catch (error) {
-        const axiosError = error as AxiosError<ApiResponse>;
+  // Fetch messages from server
+  const fetchMessages = useCallback(async (refresh: boolean = false) => {
+    setIsLoading(true);
+    setIsSwitchLoading(false);
+    try {
+      const response = await axios.get<ApiResponse>('/api/get-messages');
+      setMessages(response.data.messages || []);
+      if (refresh) {
         toast({
-          title: 'Error',
-          description:
-            axiosError.response?.data.message ?? 'Failed to fetch messages',
-          variant: 'destructive',
+          title: 'Refreshed Messages',
+          description: 'Showing latest messages',
         });
-      } finally {
-        setIsLoading(false);
-        setIsSwitchLoading(false);
       }
-    },
-    [setIsLoading, setMessages, toast]
-  );
+    } catch (error) {
+      const axiosError = error as AxiosError<ApiResponse>;
+      toast({
+        title: 'Error',
+        description:
+          axiosError.response?.data.message ?? 'Failed to fetch messages',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+      setIsSwitchLoading(false);
+    }
+  }, [setIsLoading, setMessages, toast]);
 
-  // Fetch initial state from the server
+  // Effect to fetch initial state from the server
   useEffect(() => {
     if (!session || !session.user) return;
 
     fetchMessages();
-
     fetchAcceptMessages();
-  }, [session, setValue, toast, fetchAcceptMessages, fetchMessages]);
+  }, [session, fetchMessages, fetchAcceptMessages]);
 
   // Handle switch change
   const handleSwitchChange = async () => {
     try {
       const response = await axios.post<ApiResponse>('/api/accept-messages', {
-        acceptMessages: !acceptMessages,
+        acceptMessages: !acceptMessagesValue,
       });
-      setValue('acceptMessages', !acceptMessages);
+      setAcceptMessages(!acceptMessagesValue); // Update acceptMessages state
+      setValue('acceptMessages', !acceptMessagesValue); // Update form value
       toast({
         title: response.data.message,
         variant: 'default',
@@ -116,16 +120,13 @@ function UserDashboard() {
     }
   };
 
-  if (!session || !session.user) {
-    return <div></div>;
-  }
-
-  const { username } = session.user as User;
-
-  const baseUrl = `${window.location.protocol}//${window.location.host}`;
-  const profileUrl = `${baseUrl}/u/${username}`;
-
+  // Copy profile URL to clipboard
   const copyToClipboard = () => {
+    if (!session || !session.user) return;
+
+    const baseUrl = `${window.location.protocol}//${window.location.host}`;
+    const profileUrl = `${baseUrl}/u/${session.user.username}`;
+
     navigator.clipboard.writeText(profileUrl);
     toast({
       title: 'URL Copied!',
@@ -133,6 +134,7 @@ function UserDashboard() {
     });
   };
 
+  // Render the user dashboard
   return (
     <div className="my-8 mx-4 md:mx-8 lg:mx-auto p-6 bg-white rounded w-full max-w-6xl">
       <h1 className="text-4xl font-bold mb-4">User Dashboard</h1>
@@ -142,7 +144,7 @@ function UserDashboard() {
         <div className="flex items-center">
           <input
             type="text"
-            value={profileUrl}
+            value={`https://${window.location.host}/u/${session?.user?.username}`}
             disabled
             className="input input-bordered w-full p-2 mr-2"
           />
@@ -153,12 +155,12 @@ function UserDashboard() {
       <div className="mb-4">
         <Switch
           {...register('acceptMessages')}
-          checked={acceptMessages}
+          checked={acceptMessagesValue || false} // Ensure it's not undefined
           onCheckedChange={handleSwitchChange}
           disabled={isSwitchLoading}
         />
         <span className="ml-2">
-          Accept Messages: {acceptMessages ? 'On' : 'Off'}
+          Accept Messages: {acceptMessagesValue ? 'On' : 'Off'}
         </span>
       </div>
       <Separator />
@@ -181,9 +183,9 @@ function UserDashboard() {
         {messages.length > 0 ? (
           messages.map((message, index) => (
             <MessageCard
-              key={message._id}
+              key={message._id.toString()} // Ensure _id is converted to string
               message={message}
-              onMessageDelete={handleDeleteMessage}
+              onMessageDelete={() => handleDeleteMessage(message._id.toString())}
             />
           ))
         ) : (
