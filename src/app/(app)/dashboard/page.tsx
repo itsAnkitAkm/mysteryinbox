@@ -121,7 +121,7 @@ function UserDashboard() {
   };
 
   // Copy profile URL to clipboard
-  const copyToClipboard = () => {
+  const copyToClipboard = useCallback(() => {
     if (!session || !session.user) return;
 
     const baseUrl = `${window.location.protocol}//${window.location.host}`;
@@ -132,7 +132,7 @@ function UserDashboard() {
       title: 'URL Copied!',
       description: 'Profile URL has been copied to clipboard.',
     });
-  };
+  }, [session, toast]);
 
   // Render the user dashboard
   return (
