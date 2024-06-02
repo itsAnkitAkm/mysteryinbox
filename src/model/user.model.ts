@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface Message extends Document {
+  _id: mongoose.Schema.Types.ObjectId;
   content: string;
   createdAt: Date;
 }
@@ -28,7 +29,6 @@ export interface User extends Document {
   messages: Message[];
 }
 
-// Updated User schema
 const UserSchema: Schema<User> = new mongoose.Schema({
   username: {
     type: String,
